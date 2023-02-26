@@ -163,7 +163,7 @@ min_links=args.min_links
 domain_name = urlparse(url).netloc
 maxtime=3600*args.max_time
 
-filename=domain_name.replace("/","_")
+filename=url.replace("/","_")
 sinternal=codecs.open(f"{filename}_internal_links.txt", "w",encoding="utf-8")
 sexternal=codecs.open(f"{filename}_external_links.txt", "w",encoding="utf-8")
 # initialize the set of links (unique links)
