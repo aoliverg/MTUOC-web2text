@@ -16,19 +16,54 @@
 from requests_html import HTMLSession
 from urllib.parse import urlparse, urljoin
 from bs4 import BeautifulSoup
-import colorama
-import codecs
-import requests
 import sys
 import time
+import codecs
 
-# init the colorama module
-colorama.init()
 
-GREEN = colorama.Fore.GREEN
-GRAY = colorama.Fore.LIGHTBLACK_EX
-RESET = colorama.Fore.RESET
-YELLOW = colorama.Fore.YELLOW
+from selenium import webdriver
+from selenium.webdriver import Firefox
+from selenium.webdriver.firefox.options import Options
+from selenium.webdriver.support.ui import WebDriverWait
+
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as EC
+
+import requests
+
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+import argparse
+
+def is_valid(url):
+    """
+    Checks whether `url` is a valid URL.
+    """
+    parsed = urlparse(url)
+    return bool(parsed.netloc) and bool(parsed.scheme)
+
+def get_all_website_links(browser,url):
+    """
+    Returns all URLs that is found on `url` in which it belongs to the same website
+    """
+    urls = set()
+    try:
+        try:
+            browser.get(url)
+        except:
+            print("ERROR:",sys.exc_info())
+        source=browser.page_source
+        
+        elems = browser.find_elements_by_xpath("//a[@href]")
+        urls=set()
+        for elem in elems:
+            href=elem.get_attribute("href")
+            if is_valid(href):
+                urls.add(href)
+    except:
+        print("Error: ",sys.exc_info())       
+    return urls
 
 def searchGoogle(query):
 
@@ -53,104 +88,13 @@ def searchGoogle(query):
         links.append(link)
     return(links)
 
-
-def is_valid(url):
-    """
-    Checks whether `url` is a valid URL.
-    """
-    parsed = urlparse(url)
-    return bool(parsed.netloc) and bool(parsed.scheme)
-
-
-def get_all_website_links(url):
-    """
-    Returns all URLs that is found on `url` in which it belongs to the same website
-    """
-    # all URLs of `url`
-    urls = set()
-    session = HTMLSession()
-    try:###
-        # initialize an HTTP session
-        
-        # make HTTP request & retrieve response
-        response = session.get(url)
-        # execute Javascript
-        try:
-            response.html.render()
-        except:
-            session.close()
-            return urls
-        soup = BeautifulSoup(response.html.html, "html.parser")
-        for a_tag in soup.findAll("a"):
-            href = a_tag.attrs.get("href")
-            if href == "" or href is None:
-                # href empty tag
-                continue
-            # join the URL if it's relative (not absolute link)
-            href = urljoin(url, href)
-            parsed_href = urlparse(href)
-            # remove URL GET parameters, URL fragments, etc.
-            href = parsed_href.scheme + "://" + parsed_href.netloc + parsed_href.path
-            if not is_valid(href):
-                # not a valid URL
-                continue
-            if href in internal_urls:
-                # already in the set
-                continue
-            if url not in href:
-                # external link
-                if href not in external_urls:
-                    print(f"{GRAY}[!] External link: {href}{RESET}")
-                    external_urls.add(href)
-                    sexternal.write(href+"\n")
-                continue
-            print(f"{GREEN}[*] Internal link: {href}{RESET}")
-            urls.add(href)
-            if not href in internal_urls:
-                sinternal.write(href+"\n")
-            internal_urls.add(href)
-    except:
-        print("Error: ",sys.exc_info())
-        session.close()
-        sys.exit()
-    session.close()
-    return urls
-
-
-def crawl(url, max_urls=30):
-    """
-    Crawls a web page and extracts all links.
-    You'll find all links in `external_urls` and `internal_urls` global set variables.
-    params:
-        max_urls (int): number of max urls to crawl, default is 30.
-    """
-    global total_urls_visited
-    total_urls_visited += 1
-    print(f"{YELLOW}[*] Crawling: {url}{RESET}")
-    links = get_all_website_links(url)
-    for link in links:
-        if total_urls_visited > max_urls:
-            break
-        if time.time() > start + maxtime: 
-            print("Max time reached!")
-            print("[+] Total Internal links:", len(internal_urls))
-            print("[+] Total External links:", len(external_urls))
-            print("[+] Total URLs:", len(external_urls) + len(internal_urls))
-            print("[+] Total crawled URLs:", total_urls_visited)
-            sys.exit()
-        try:
-            crawl(link, max_urls=max_urls)
-        except:
-            print("ERROR in crawling: ",str(url),"\nTotal urls: ",str(total_urls_visited)+"\n"+str(sys.exc_info()))
-
-
-#if __name__ == "__main__":
-import argparse
 parser = argparse.ArgumentParser(description="Link Extractor Tool with Python")
-parser.add_argument("--url", help="The URL to extract links from.")
+parser.add_argument("--url", help="The URL to extract links from.",required=True)
+parser.add_argument("-o","--output", help="The URL to extract links from.",required=True)
+
 parser.add_argument("-m", "--max_urls", help="Number of max URLs to crawl, default is 10000.", default=10000, type=int)
 parser.add_argument("-t", "--max_time", help="Max downloading time in hours, default is 1 hour.", default=1, type=float)
-parser.add_argument("--min_links", help="Minimun number of internal links. If fewer perform Google search.", default=100, type=int)
+parser.add_argument("--min_links", help="Minimun number of internal links. If fewer perform Google search.", default=10, type=int)
 
 if len(sys.argv) < 2:
     parser.print_usage()
@@ -158,30 +102,69 @@ if len(sys.argv) < 2:
 
 args = parser.parse_args()
 url = args.url
+output=args.output
 max_urls = args.max_urls
 min_links=args.min_links
 domain_name = urlparse(url).netloc
 maxtime=3600*args.max_time
 
-filename=url.replace("/","_")
-sinternal=codecs.open(f"{filename}_internal_links.txt", "w",encoding="utf-8")
-sexternal=codecs.open(f"{filename}_external_links.txt", "w",encoding="utf-8")
-# initialize the set of links (unique links)
-internal_urls = set()
-external_urls = set()
-total_urls_visited = 0
-if not url.startswith("http"): url="http://"+url
+toinspect=set()
+alreadydone=set()
+
+
+opts = Options()
+opts.add_argument('-headless')
+opts.accept_untrusted_certs = True
+browser = webdriver.Firefox(options=opts)
+browser.set_page_load_timeout(8)
+
+sortida=codecs.open(output,"w",encoding="utf-8")
 start = time.time()
 
-crawl(url, max_urls=max_urls)
-
-if len(internal_urls)<min_links:
+toinspect.add(url)
+continua=True
+while continua:
+    URL=toinspect.pop()
+    if not URL in alreadydone:
+        print(URL,len(alreadydone),len(toinspect))
+        sortida.write(URL+"\n")
+        links = get_all_website_links(browser,URL)
+        for link in links:
+            link = urljoin(url, link)
+            parsed_href = urlparse(link)
+            # remove URL GET parameters, URL fragments, etc.
+            href = parsed_href.scheme + "://" + parsed_href.netloc + parsed_href.path
+            if url in href and not link in alreadydone:
+                toinspect.add(link)
+        alreadydone.add(URL)
+    if time.time() > start + maxtime: 
+        continua=False
+    if len(alreadydone)>=max_urls:
+        continua=False
+        
+if len(alreadydone)<min_links:
     googlelinks=searchGoogle(url)
     for gl in googlelinks:
-        crawl(gl, max_urls=max_urls)
+        toinspect.add(gl)
 
-print("[+] Total Internal links:", len(internal_urls))
-print("[+] Total External links:", len(external_urls))
-print("[+] Total URLs:", len(external_urls) + len(internal_urls))
-print("[+] Total crawled URLs:", total_urls_visited)
+continua=True
+while continua:
+    URL=toinspect.pop()
+    if not URL in alreadydone:
+        print(URL,len(alreadydone),len(toinspect))
+        sortida.write(URL+"\n")
+        links = get_all_website_links(browser,URL)
+        for link in links:
+            link = urljoin(url, link)
+            parsed_href = urlparse(link)
+            # remove URL GET parameters, URL fragments, etc.
+            href = parsed_href.scheme + "://" + parsed_href.netloc + parsed_href.path
+            if url in href and not link in alreadydone:
+                toinspect.add(link)
+        alreadydone.add(URL)
+    if time.time() > start + maxtime: 
+        continua=False
+    if len(alreadydone)>=max_urls:
+        continua=False
 
+sortida.close()
