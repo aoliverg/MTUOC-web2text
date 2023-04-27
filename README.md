@@ -39,5 +39,37 @@ python3 MTUOC-link-extractor.py --url http://www.foo.com --o links-foo.txt
 
 It will detect 10000 links maximum in 1 hour. After that the process will end. We can modify these parameters with the -t and --min_links. If less of a minimum number of links (by default 10) is obtained, a search to Google is performed to try to find more.
 
+## MTUOC-links2text.py
 
+This program gets the text from the links. Once obtained the text, the language is detected and the text is segmented. One file for each language is created. To get the help the option -h can be used:
+
+```
+ython3 MTUOC-links2text.py -h
+usage: MTUOC-links2text.py [-h] -i INPUT -o OUTPUT [-s SRXFILE] [-m LDMODEL]
+
+Script to download a list of links, convert to text, segment and classify by language.
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -i INPUT, --input INPUT
+                        The input file.
+  -o OUTPUT, --output OUTPUT
+                        The suffix for the output file.
+  -s SRXFILE, --srxfile SRXFILE
+                        The SRX file to segment the texts. Default: segment.srx
+  -m LDMODEL, --ldmodel LDMODEL
+                        The fast_text model to detect the languages. Default: lid.176.bin
+
+```
+
+To convert all the links in the file links-foo.txt, we can write:
+
+```
+python3 MTUOC-links2text.py -i links-foo.txt -o text-foo
+```
+I http://www.foo.com contains texts in English, Spanish and Frech, the following files will be created: text-foo-en.txt, text-foo-es.txt and text-foo-fr.txt
+
+To run the program you need a language model for fast_text. By default it uses lid.176.bin, that can be obtained from:[https://dl.fbaipublicfiles.com/fasttext/supervised-models/lid.176.bin](https://dl.fbaipublicfiles.com/fasttext/supervised-models/lid.176.bin]. This file should be located in the same direcory as MTUOC-links2text.py
+
+By default the program uses the SRX file segment.srx that is distributed along with the program, but any other SRX file can be specified usint the -s option.
 
