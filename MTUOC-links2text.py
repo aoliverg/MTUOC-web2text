@@ -16,6 +16,9 @@ import fasttext
 
 from iso639 import languages
 
+import argparse
+
+
 #SRX_SEGMENTER
 import lxml.etree
 import regex
@@ -26,7 +29,6 @@ from typing import (
     Dict,
     Optional
 )
-
 
 class SrxSegmenter:
     """Handle segmentation with SRX regex format.
@@ -81,7 +83,6 @@ class SrxSegmenter:
 
         return segments, whitespaces
 
-
 def parse(srx_filepath: str) -> Dict[str, Dict[str, List[Tuple[str, Optional[str]]]]]:
     """Parse SRX file and return it.
     :param srx_filepath: is soruce SRX file.
@@ -119,7 +120,6 @@ def parse(srx_filepath: str) -> Dict[str, Dict[str, List[Tuple[str, Optional[str
         rules[rule_name] = current_rule
 
     return rules
-
 
 def segmenta(cadena):
     segmenter = SrxSegmenter(rules[srxlang],cadena)
@@ -208,17 +208,29 @@ blacklist = [
     # there may be more elements you don't want, such as "style", etc.
 ]
 
-fentrada=sys.argv[1]
-#fsortida=sys.argv[2]
 
-fsortida=fentrada.replace(".txt","EXTRACTED_TEXT")
+parser = argparse.ArgumentParser(description="Script to download a list of links, convert to text, segment and classify by language.")
+parser.add_argument("-i","--input", help="The input file.",required=True)
+parser.add_argument("-o","--output", help="The suffix for the output file.",required=True)
+parser.add_argument("-s", "--srxfile", help="The SRX file to segment the texts. Default: segment.srx", default="segment.srx")
+parser.add_argument("-m", "--ldmodel", help="The fast_text model to detect the languages. Default: lid.176.bin", default="lid.176.bin")
+
+if len(sys.argv) < 2:
+    parser.print_usage()
+    sys.exit(1)
+
+args = parser.parse_args()
+
+
+fentrada=args.input
+fsortida=args.output
 
 entrada=codecs.open(fentrada,"r",encoding="utf-8")
 
-LDmodel="lid.176.bin"
+LDmodel = args.ldmodel
 modelFT = fasttext.load_model(LDmodel)
 
-srxfile="segment.srx"
+srxfile=args.srxfile
 rules = parse(srxfile)
 available_languages=rules.keys()
 
@@ -226,59 +238,62 @@ outputfiles=[]
 repeatedcontrol={}
 
 for linia in entrada:
-    link=linia.rstrip()
-    print("LINK:",link)
-    if link.endswith(".pdf") or link.endswith(".PDF"):
-        r = requests.get(link)
-        f = io.BytesIO(r.content)
-        with tempfile.NamedTemporaryFile(delete=True) as temp:
-            temp.write(f.read())
-            temp.flush()
-            text = textract.process(temp.name,encoding='utf-8',extension=".pdf",method='pdftotext').decode("utf-8", "replace")
-            text=arregla(text)
-            #text=" ".join(text.split())
-    else:
-        session = HTMLSession()
-        try:
-            response = session.get(link)
-            
+    try:
+        link=linia.rstrip()
+        print("LINK:",link)
+        if link.endswith(".pdf") or link.endswith(".PDF"):
+            r = requests.get(link)
+            f = io.BytesIO(r.content)
+            with tempfile.NamedTemporaryFile(delete=True) as temp:
+                temp.write(f.read())
+                temp.flush()
+                text = textract.process(temp.name,encoding='utf-8',extension=".pdf",method='pdftotext').decode("utf-8", "replace")
+                text=arregla(text)
+                #text=" ".join(text.split())
+        else:
+            session = HTMLSession()
             try:
-                response.html.render()
-            except:
-                session.close()
-            soup = BeautifulSoup(response.html.html, "html.parser")
-            text=get_text(soup)
-            #text="\n".join(text)
-            #print(text)
-        
-        except IOError as e:
-                if e==KeyboardInterrupt:
-                    sys.exit(0)
-                else:
-                    print("ERROR:",sys.exc_info())
-        session.close()            
-    textmod=" ".join(text).replace("\n"," ")
-    DL=modelFT.predict(textmod, k=1)
-    L=DL[0][0].replace("__label__","")
-    confL=DL[1][0]
-    srxlang=languages.get(alpha2=L).name       
-    print(L,confL,srxlang)
+                response = session.get(link)
+                
+                try:
+                    response.html.render()
+                except:
+                    session.close()
+                soup = BeautifulSoup(response.html.html, "html.parser")
+                text=get_text(soup)
+                #text="\n".join(text)
+                #print(text)
+            
+            except IOError as e:
+                    if e==KeyboardInterrupt:
+                        sys.exit(0)
+                    else:
+                        print("ERROR:",sys.exc_info())
+            session.close()            
+        textmod=" ".join(text).replace("\n"," ")
+        DL=modelFT.predict(textmod, k=1)
+        L=DL[0][0].replace("__label__","")
+        confL=DL[1][0]
+        srxlang=languages.get(alpha2=L).name       
+        print(L,confL,srxlang)
 
-    if not L in repeatedcontrol:
-        repeatedcontrol[L]=[]
+        if not L in repeatedcontrol:
+            repeatedcontrol[L]=[]
 
-     
-    if not srxlang in available_languages:
-        print("WARNING: language "+srxlang+" not available in "+srxfile+". Available languages: "+", ".join(available_languages))
-    paras=text#.split("\n")
-    filename=fsortida+"-"+L+".txt"
-    sortida=codecs.open(filename,"a",encoding="utf-8")
-    for para in paras:
-        segments=segmenta(para)
-        for segment in segments:            
-            if not segment in repeatedcontrol[L]:
-                sortida.write(segment+"\n")
-                print(segment)
-                repeatedcontrol[L].append(segment)
+         
+        if not srxlang in available_languages:
+            print("WARNING: language "+srxlang+" not available in "+srxfile+". Available languages: "+", ".join(available_languages))
+        paras=text#.split("\n")
+        filename=fsortida+"-"+L+".txt"
+        sortida=codecs.open(filename,"a",encoding="utf-8")
+        for para in paras:
+            segments=segmenta(para)
+            for segment in segments:            
+                if not segment in repeatedcontrol[L]:
+                    sortida.write(segment+"\n")
+                    print(segment)
+                    repeatedcontrol[L].append(segment)
+    except:
+        print("ERROR converting: ",linia, sys.exc_info())
     sortida.close()
         
