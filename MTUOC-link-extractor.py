@@ -90,11 +90,11 @@ def searchGoogle(query):
 
 parser = argparse.ArgumentParser(description="Link Extractor Tool with Python")
 parser.add_argument("--url", help="The URL to extract links from.",required=True)
-parser.add_argument("-o","--output", help="The URL to extract links from.",required=True)
+parser.add_argument("-o","--output", help="The output file that will contain the links.",required=True)
 
 parser.add_argument("-m", "--max_urls", help="Number of max URLs to crawl, default is 10000.", default=10000, type=int)
 parser.add_argument("-t", "--max_time", help="Max downloading time in hours, default is 1 hour.", default=1, type=float)
-parser.add_argument("--min_links", help="Minimun number of internal links. If fewer perform Google search.", default=10, type=int)
+parser.add_argument("--min_links", help="Minimun number of internal links (default 10). If fewer perform Google search.", default=10, type=int)
 
 if len(sys.argv) < 2:
     parser.print_usage()
